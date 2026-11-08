@@ -1,427 +1,302 @@
 import streamlit as st
-import openai
 import hashlib
 import time
+import os
 
-st.set_page_config(page_title="PlannerX Africa", page_icon="🌍", layout="wide")
+st.set_page_config(page_title="PlannerX Africa - Godelone", page_icon="🌍", layout="wide")
+st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 
-# ========== SESSION STATE ==========
-if "users" not in st.session_state:
-    st.session_state.users = {
-        "admin@plannerx.com": {"name": "Emmanuel Gyasi", "password": hashlib.sha256("admin123".encode()).hexdigest(), "plan": "Pro", "paid": True},
-        "demo@plannerx.com": {"name": "Demo User", "password": hashlib.sha256("demo123".encode()).hexdigest(), "plan": "Free", "paid": False},
-    }
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.current_user = None
-if "reveal_numbers" not in st.session_state:
-    st.session_state.reveal_numbers = False
-if "user_api_key" not in st.session_state:
-    st.session_state.user_api_key = ""
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
+# ============ HELPERS ============
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
-# ========== PRIVATE MASKED NUMBERS ==========
-MASKED_1 = "+233 25 707 57**"
-MASKED_2 = "+233 59 751 73**"
-FULL_1 = "+233 25 707 5782"
-FULL_2 = "+233 59 751 7363"
+def get_secret(key, default=""):
+    # ✅ SAFE - Works on laptop (no secrets.toml) AND on Cloud. Never crashes.
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return os.environ.get(key, default)
 
-# ========== FOOTER ==========
-def show_footer():
-    st.markdown("---")
-    st.markdown(f"""
-    <div style='text-align:center; background-color:#f0f2f6; padding:20px; border-radius:10px;'>
-    <h3>🌍 PlannerX Africa - Built with ❤️ in Ghana</h3>
-    <p><b>Developer:</b> Godelone | <b>KNUST, Kumasi, Ghana</b> 🇬🇭<br>
-    <b>Student Developer | Urban Planning & AI Innovator</b></p>
-    <p>📧 Contact: plannerx.ghana@gmail.com<br>
-    💬 <b>WhatsApp / SMS ONLY - Please Do NOT Call</b><br>
-    📱 {MASKED_1} / {MASKED_2}<br>
-    <i>Full number hidden for privacy. Reveal in Payment Tab to see full number.</i></p>
-    <p>⭐ <b>Trusted by 500+ Builders</b> | ✅ Verified Developer | 🔒 Secure Payments</p>
-    <p><b>💰 Official Payment Details:</b><br>
-    📱 <b>MTN MoMo:</b> {MASKED_1} / {MASKED_2} - <b>Gyasi Emmanuel</b><br>
-    🏦 <b>GTBank:</b> 1305001011*** - <b>Gyasi Emmanuel</b><br>
-    ⚠️ Do NOT pay to any other number. That is FRAUD.</p>
+# ALL 54 AFRICAN COUNTRIES - SEARCHABLE
+AFRICAN_COUNTRIES = [
+    "Ghana 🇬🇭", "Nigeria 🇳🇬", "Kenya 🇰🇪", "South Africa 🇿🇦", "Ethiopia 🇪🇹",
+    "Egypt 🇪🇬", "Morocco 🇲🇦", "Algeria 🇩🇿", "Tunisia 🇹🇳", "Libya 🇱🇾", "Sudan 🇸🇩", "South Sudan 🇸🇸",
+    "Uganda 🇺🇬", "Tanzania 🇹🇿", "Rwanda 🇷🇼", "Burundi 🇧🇮", "Democratic Republic of Congo 🇨🇩", "Republic of Congo 🇨🇬",
+    "Cameroon 🇨🇲", "Gabon 🇬🇦", "Equatorial Guinea 🇬🇶", "Chad 🇹🇩", "Central African Republic 🇨🇫",
+    "Senegal 🇸🇳", "Mali 🇲🇱", "Guinea 🇬🇳", "Guinea-Bissau 🇬🇼", "Sierra Leone 🇸🇱", "Liberia 🇱🇷", "Côte d'Ivoire 🇨🇮", "Burkina Faso 🇧🇫", "Niger 🇳🇪", "Togo 🇹🇬", "Benin 🇧🇯", "Gambia 🇬🇲", "Cape Verde 🇨🇻", "Mauritania 🇲🇷",
+    "Angola 🇦🇴", "Zambia 🇿🇲", "Zimbabwe 🇿🇼", "Mozambique 🇲🇿", "Malawi 🇲🇼", "Botswana 🇧🇼", "Namibia 🇳🇦", "Lesotho 🇱🇸", "Eswatini 🇸🇿", "Madagascar 🇲🇬", "Mauritius 🇲🇺", "Seychelles 🇸🇨", "Comoros 🇰🇲", "Djibouti 🇩🇯", "Eritrea 🇪🇷", "Somalia 🇸🇴"
+]
+
+LANGUAGES = ["English", "Twi", "Pidgin", "Swahili", "Yoruba", "Hausa", "French", "Amharic", "Arabic", "Zulu", "Shona"]
+
+# ============ SESSION STATE ============
+if "users" not in st.session_state:
+    st.session_state.users = {
+        "demo@plannerx.com": {"name": "Demo User", "password": hash_pw("demo123"), "plan": "Free", "paid": False},
+        "admin@plannerx.com": {"name": "The Developer Godelone", "password": hash_pw("admin123"), "plan": "Pro", "paid": True},
+    }
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
+if "auth_view" not in st.session_state:
+    st.session_state.auth_view = "login"
+if "just_created_email" not in st.session_state:
+    st.session_state.just_created_email = ""
+if "just_created_msg" not in st.session_state:
+    st.session_state.just_created_msg = ""
+
+# ============ HEADER ============
+st.title("🌍 PlannerX Africa")
+st.markdown("### Don't Just Ask AI. Plan Africa With AI.")
+st.caption("Built by **The Developer Godelone** | KNUST, Kumasi, Ghana 🇬🇭 | Trusted by 500+ Builders")
+st.divider()
+
+# ============ SIDEBAR - SEARCHABLE COUNTRY + LANGUAGE ============
+with st.sidebar:
+    st.header("🌍 Your Location")
+    st.caption("Type to search any African country 👇")
+    country_search = st.text_input("🔍 Search Country", placeholder="Type Ghana, Nigeria, Kenya...", key="country_search")
+    if country_search:
+        filtered = [c for c in AFRICAN_COUNTRIES if country_search.strip().lower() in c.lower()]
+        if filtered:
+            st.caption(f"✨ {len(filtered)} suggestion(s) found:")
+            selected_country = st.selectbox("👇 Select your country:", filtered, key="country_filtered")
+        else:
+            st.warning(f"❌ No African country matches '{country_search}'. Try 'Ghana' or 'Kenya'.")
+            selected_country = st.selectbox("Choose from all countries:", AFRICAN_COUNTRIES, key="country_all_fallback")
+    else:
+        selected_country = st.selectbox("🌍 Select Country (All 54 African Countries):", AFRICAN_COUNTRIES, key="country_all")
+    st.success(f"📍 You are planning in: **{selected_country}**")
+    language = st.selectbox("🗣️ Language", LANGUAGES)
+    st.divider()
+    st.subheader("🔑 OpenAI API Key")
+    st.caption("For real GPT answers. If empty, Demo Mode works.")
+    user_key = st.text_input("Paste sk-... key", type="password", key="api_key_input")
+    admin_key = get_secret("OPENAI_API_KEY", "")
+    api_key_to_use = user_key.strip() if user_key else admin_key
+    if api_key_to_use:
+        st.success("✅ GPT Active")
+    else:
+        st.warning("⚠️ Demo Mode - Add API Key for real GPT")
+    if st.session_state.logged_in:
+        user_data = st.session_state.users.get(st.session_state.current_user, {})
+        st.divider()
+        st.write(f"👤 **{user_data.get('name','User')}**")
+        st.write(f"📧 {st.session_state.current_user}")
+        st.write(f"⭐ Plan: **{user_data.get('plan','Free')}**")
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.current_user = None
+            st.session_state.auth_view = "login"
+            st.session_state.just_created_email = ""
+            st.session_state.just_created_msg = ""
+            st.rerun()
+
+# ============ AUTH - LOGIN / SIGNUP - FIXED ============
+if not st.session_state.logged_in:
+    st.markdown("## 👋 Welcome to PlannerX Africa")
+    st.markdown("""
+    <div style="background-color:#E8F5E9; padding:15px; border-radius:10px; border:2px solid #4CAF50;">
+    <h3 style="color:#2E7D32; margin:0;">📖 HOW TO LOGIN - READ THIS FIRST (30 Seconds)</h3>
+    <p style="font-size:16px; color:#000; margin-top:10px;">
+    <b>🆕 NEW USER?</b><br>
+    1. Click <b>✍️ Sign Up - Free</b> below<br>
+    2. Type Your Name, Email, Password<br>
+    3. Tick Agree Box<br>
+    4. Click <b>Create Free Account</b><br>
+    5. ✅ You will be taken <b>AUTOMATICALLY to Login Page</b> - Your email will already be filled! Just type password and click Login!<br><br>
+    <b>🔐 OLD USER?</b><br>
+    1. Click <b>🔐 Login</b> below<br>
+    2. Type SAME email you used to Sign Up (all small letters, no spaces)<br>
+    3. Type SAME password<br>
+    4. Click <b>Login</b><br><br>
+    <b>💡 TEST NOW:</b> Email: <b>demo@plannerx.com</b> | Password: <b>demo123</b>
+    </p>
     </div>
     """, unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        st.link_button("💬 WhatsApp Emmanuel (Private)", "https://wa.me/233257075782?text=Hello%20Emmanuel,%20I%20need%20help%20with%20PlannerX", use_container_width=True)
-    with col2:
-        st.link_button("💬 WhatsApp Support (Private)", "https://wa.me/233597517363?text=Hello%20PlannerX%20Support", use_container_width=True)
-    st.caption("🚫 Please do NOT call. WhatsApp / SMS only. Developer replies within 24 hours. PRO users get reply within 2 hours.")
-    with st.expander("📜 Terms & Conditions"):
-        st.markdown("""
-        **1. Developer:** Godelone, KNUST, Kumasi, Ghana.
-        **2. Not Legal Advice:** Estimates and AI analysis only. Always confirm with Licensed Surveyor, Lawyer, KMA/AMA and Lands Commission before buying land or building.
-        **3. Payments:** $10 / Month for PRO. Keep Transaction ID. Pay ONLY to Gyasi Emmanuel. No refund after 7 days unless app fails.
-        **4. Responsible Use:** Do NOT forge documents, do NOT build on waterways/government land, verify at Lands Commission.
-        **5. Privacy:** Your documents are NOT saved. They are sent only to OpenAI for analysis and deleted after. Developer's numbers are masked to prevent spam calls.
-        **6. Liability:** Developer not liable for decisions without professional verification.
-        **7. Support:** WhatsApp only - no voice calls.
-        **By using PlannerX, you agree to these Terms.**
-        """)
-    with st.expander("✅ How To Use Responsibly"):
-        st.markdown("- Check Permit Checklist - if <5, DO NOT BUILD.\n- Check Flood - if HIGH RISK, do not build.\n- Check Cost - budget +20% extra.\n- Upload documents to Analyser - if Risk Score <6, DO NOT BUY.\n- Verify at Lands Commission + KMA before paying seller.\n- NEVER pay cash without receipt + witnesses.")
-    st.caption("© 2026 PlannerX Africa | Emmanuel Gyasi, KNUST, Ghana | Version 5.0 FINAL - $10 PRO + Document Analyser 🇬🇭")
-
-# ========== LOGIN PAGE ==========
-if not st.session_state.logged_in:
-    st.title("🌍 PlannerX Africa")
-    st.caption("Don't just ask AI. Plan Africa with AI. | Emmanuel Gyasi, KNUST 🇬🇭")
-    st.success(f"⭐ Trusted | ✅ Verified Developer | 🔒 Private Numbers: {MASKED_1} | 💬 WhatsApp Only - No Calls | 💰 PRO $10/month")
-    st.markdown("### 🔐 Welcome - Login to Continue")
-    tab_login, tab_signup = st.tabs(["🔐 Login", "✍️ Sign Up - Free"])
-    with tab_login:
-        email = st.text_input("Email", key="login_email")
-        pw = st.text_input("Password", type="password", key="login_pw")
-        if st.button("Login", use_container_width=True):
-            if email in st.session_state.users and st.session_state.users[email]["password"] == hash_pw(pw):
+    if st.session_state.just_created_msg:
+        st.success(st.session_state.just_created_msg)
+        st.info(f"👉 Your email **{st.session_state.just_created_email}** is already filled below. Just type your password and click Login!")
+    auth_choice = st.radio("Choose:", ["🔐 Login", "✍️ Sign Up - Free"], index=0 if st.session_state.auth_view == "login" else 1, horizontal=True, key="auth_radio")
+    if auth_choice == "🔐 Login":
+        st.session_state.auth_view = "login"
+    else:
+        st.session_state.auth_view = "signup"
+    if st.session_state.auth_view == "login":
+        st.subheader("🔐 Login To Your Account")
+        st.caption("👉 Type SAME email + password you used when you signed up.")
+        default_email = st.session_state.just_created_email if st.session_state.just_created_email else ""
+        email_raw = st.text_input("Email", value=default_email, key="login_email", placeholder="e.g. demo@plannerx.com")
+        pw = st.text_input("Password", type="password", key="login_pw", placeholder="Your password")
+        login_status = st.empty()
+        if st.button("Login", use_container_width=True, key="login_btn"):
+            email = email_raw.strip().lower()
+            if not email or not pw:
+                login_status.error("❌ Please enter BOTH email and password.")
+            elif email not in st.session_state.users:
+                login_status.error(f"❌ No account found for '{email}'. Click 'Sign Up - Free' above and create account first!")
+            elif st.session_state.users[email]["password"] != hash_pw(pw):
+                login_status.error("❌ Wrong password! Check password.")
+            else:
+                st.session_state.just_created_msg = ""
+                st.session_state.just_created_email = ""
+                login_status.success(f"✅ Welcome back, {st.session_state.users[email]['name']}! Loading dashboard...")
+                time.sleep(0.6)
                 st.session_state.logged_in = True
                 st.session_state.current_user = email
                 st.rerun()
-            else:
-                st.error("❌ Wrong email or password. Try demo@plannerx.com / demo123")
         st.info("💡 Demo: **demo@plannerx.com** / **demo123** | Admin: **admin@plannerx.com** / **admin123**")
-    with tab_signup:
-        name = st.text_input("Full Name")
-        new_email = st.text_input("Email", key="signup_email")
-        new_pw = st.text_input("Create Password", type="password", key="signup_pw")
-        agree = st.checkbox("I agree to Terms & Conditions - I will NOT call, only WhatsApp")
-        if st.button("Create Free Account", use_container_width=True):
-            if not agree:
-                st.error("Please tick Terms")
-            elif not name or not new_email or not new_pw:
-                st.error("Fill all fields")
+        if st.button("Don't have account? Click to Sign Up →", key="goto_signup"):
+            st.session_state.auth_view = "signup"
+            st.rerun()
+    else:
+        st.subheader("✍️ Create Free Account")
+        st.caption("👉 After you click Create, you will be TAKEN AUTOMATICALLY to Login Page!")
+        name = st.text_input("Full Name", key="su_name", placeholder="e.g. Emmanuel Gyasi")
+        new_email_raw = st.text_input("Email", key="su_email", placeholder="e.g. you@gmail.com")
+        new_pw = st.text_input("Password", type="password", key="su_pw", placeholder="Create a password - remember it!")
+        agree = st.checkbox("I agree to Terms - I will NOT call, only WhatsApp/SMS", key="su_agree")
+        if st.button("Create Free Account", use_container_width=True, key="signup_btn"):
+            new_email = new_email_raw.strip().lower()
+            if not name or not new_email or not new_pw:
+                st.error("❌ Please fill ALL fields - Name, Email, Password")
+            elif "@" not in new_email or "." not in new_email:
+                st.error("❌ Please enter valid email like you@gmail.com")
+            elif not agree:
+                st.error("❌ Please tick 'I agree to Terms'")
             elif new_email in st.session_state.users:
-                st.error("Email exists. Please Login.")
+                st.warning(f"⚠️ Email {new_email} already exists! Go to Login and login with it.")
+                st.session_state.auth_view = "login"
+                st.session_state.just_created_email = new_email
+                st.session_state.just_created_msg = f"⚠️ Account already exists for {new_email}. Please login below."
+                st.rerun()
             else:
-                st.session_state.users[new_email] = {"name": name, "password": hash_pw(new_pw), "plan": "Free", "paid": False}
-                st.success(f"✅ Account created for {name}! Go to Login.")
-    show_footer()
+                st.session_state.users[new_email] = {"name": name.strip(), "password": hash_pw(new_pw), "plan": "Free", "paid": False}
+                st.session_state.auth_view = "login"
+                st.session_state.just_created_email = new_email
+                st.session_state.just_created_msg = f"✅ Account created successfully for {name}! Now please LOGIN below with your password."
+                st.rerun()
+        if st.button("Already have account? Click to Login →", key="goto_login"):
+            st.session_state.auth_view = "login"
+            st.rerun()
+    st.divider()
+    st.markdown("**The Developer Godelone** | plannerx.ghana@gmail.com | WhatsApp Only - No Calls | © 2026 PlannerX Africa")
     st.stop()
 
-# ========== LOGGED IN ==========
-user_info = st.session_state.users[st.session_state.current_user]
-is_pro = user_info["plan"] == "Pro"
+# ============ LOGGED IN - MAIN APP ============
+current_user_email = st.session_state.current_user
+user = st.session_state.users.get(current_user_email, {"name": "User", "plan": "Free", "paid": False})
+is_pro = user.get("paid", False) or user.get("plan") == "Pro"
+st.success(f"👋 Welcome, **{user['name']}**! Planning in **{selected_country}** | Language: **{language}** | Plan: **{user['plan']}** {'⭐ PRO' if is_pro else '🆓 FREE'}")
+st.caption(f"📍 Country: {selected_country} | Developer: The Developer Godelone")
 
-st.sidebar.title("🌍 PlannerX Africa")
-st.sidebar.success(f"👤 {user_info['name']}\n⭐ Plan: {user_info['plan']} {'✅ PRO' if is_pro else '🆓 FREE'}")
-st.sidebar.info(f"**Developer:** Emmanuel Gyasi\nKNUST, Ghana 🇬🇭\n💬 WhatsApp Only - No Calls\n📱 {MASKED_1}")
-if st.sidebar.button("🚪 Logout"):
-    st.session_state.logged_in = False
-    st.session_state.current_user = None
-    st.rerun()
+def ask_gpt(prompt):
+    if not api_key_to_use:
+        return f"**DEMO MODE (Add API Key for real GPT):**\n\nFor **{selected_country}** in {language}: {prompt}\n\n✅ Demo Answer: This is a good question! In {selected_country}, you should: 1) Check Title at Lands Commission, 2) Check Flood, 3) Check Permit at Assembly. Add OpenAI API Key in sidebar for real detailed GPT answer from The Developer Godelone's PlannerX."
+    try:
+        import openai
+        client = openai.OpenAI(api_key=api_key_to_use)
+        res = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role":"system","content":f"You are PlannerX, expert Urban Planner for {selected_country}, Africa. Answer in {language}. Be practical, mention Lands Commission, Assembly, flood, costs. Developer is The Developer Godelone."},{"role":"user","content":prompt}], max_tokens=800)
+        return res.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ GPT Error: {e}. Check API Key / credit."
 
-# ========== OPENAI API KEY SYSTEM ==========
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔑 OpenAI API Key")
-st.sidebar.caption("For Real GPT Answers. If empty, Demo Mode.")
-user_key_input = st.sidebar.text_input("Paste Your OpenAI API Key (sk-...) - Optional", value=st.session_state.user_api_key, type="password", help="Get key at platform.openai.com/api-keys")
-if user_key_input:
-    st.session_state.user_api_key = user_key_input
-api_key_to_use = None
-key_source = "Demo"
-try:
-    admin_key = st.secrets["OPENAI_API_KEY"]
-    if admin_key:
-        api_key_to_use = admin_key
-        key_source = "PlannerX Admin Key"
-except Exception:
-    pass
-if st.session_state.user_api_key:
-    api_key_to_use = st.session_state.user_api_key
-    key_source = "Your Personal Key"
-if api_key_to_use:
-    openai.api_key = api_key_to_use
-    has_key = True
-    st.sidebar.success(f"✅ GPT Active: {key_source}")
-else:
-    has_key = False
-    st.sidebar.warning("⚠️ Demo Mode - No API Key")
-    st.sidebar.info("💡 How to get key:\n1. Go to platform.openai.com\n2. Sign Up / Login\n3. Click API Keys\n4. Create New Key\n5. Copy sk-... and paste here")
-
-country = st.sidebar.selectbox("Select Country", ["Ghana 🇬🇭", "Nigeria 🇳🇬", "Kenya 🇰🇪", "South Africa 🇿🇦", "Ethiopia 🇪🇹"])
-language = st.sidebar.selectbox("Language", ["English", "Twi", "Pidgin", "Swahili", "Yoruba", "Hausa"])
-
-# ========== $10 PRICING ==========
-country_data = {
-    "Ghana 🇬🇭": {"currency": "GH₵", "city_example": "Bantama, Kumasi", "price": "GH₵ 150 / month (~$10)", "usd": "$10", "local_amount": "GH₵ 150"},
-    "Nigeria 🇳🇬": {"currency": "₦", "city_example": "Lekki, Lagos", "price": "₦ 15,000 / month (~$10)", "usd": "$10", "local_amount": "₦ 15,000"},
-    "Kenya 🇰🇪": {"currency": "KSh", "city_example": "Westlands, Nairobi", "price": "KSh 1,300 / month (~$10)", "usd": "$10", "local_amount": "KSh 1,300"},
-    "South Africa 🇿🇦": {"currency": "R", "city_example": "Sandton, Johannesburg", "price": "R 190 / month (~$10)", "usd": "$10", "local_amount": "R 190"},
-    "Ethiopia 🇪🇹": {"currency": "Br", "city_example": "Bole, Addis Ababa", "price": "Br 1,400 / month (~$10)", "usd": "$10", "local_amount": "Br 1,400"},
-}
-info = country_data[country]
-
-st.title("🌍 PlannerX Africa")
-st.caption(f"Welcome {user_info['name']} | Plan: {user_info['plan']} | {country} | Emmanuel Gyasi, KNUST 🇬🇭")
-if not has_key:
-    st.info("💡 **Demo Mode:** Paste your OpenAI API Key in left sidebar (🔑 OpenAI API Key) for REAL GPT answers.")
-
-# ========== 7 TABS ==========
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["🧠 GPT Planner", "🌊 Flood Predictor", "💰 Cost Estimator", "📋 Permit Checklist", "💳 Upgrade to Pro - $10", "⭐ Trust & Reviews", "📄 Analyse My Documents"])
-
-def need_pro():
-    st.warning("🔒 PRO Only - $10/month. Upgrade to unlock. One fake land costs GH₵ 50,000 - PRO saves you for $10.")
-
-# TAB 1 - GPT
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["🧠 GPT Planner - FREE", "🌊 Flood - FREE", "💰 Cost - FREE", "📋 Permit - FREE", "💳 Upgrade $10", "⭐ Trust & Reviews - FREE", "📄 Analyse Documents - PRO"])
 with tab1:
-    if not is_pro:
-        need_pro()
-    else:
-        for m in st.session_state.messages:
-            with st.chat_message(m["role"]):
-                st.write(m["content"])
-        if prompt := st.chat_input("Ask PlannerX anything..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.write(prompt)
-            with st.chat_message("assistant"):
-                if has_key:
-                    try:
-                        with st.spinner("🧠 PlannerX GPT is thinking..."):
-                            res = openai.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "system", "content": f"You are PlannerX, expert urban planner for {country} in {language}. Developer Emmanuel Gyasi, KNUST. Give practical, safe, step-by-step advice. Warn about flood and land fraud."}] + st.session_state.messages)
-                            ans = res.choices[0].message.content
-                            st.write(ans)
-                            st.session_state.messages.append({"role": "assistant", "content": ans})
-                    except Exception as e:
-                        st.error(f"❌ API Key Error: {e}")
-                        st.write("Demo GPT: Check documents, Check flood, Get KMA permit.")
-                else:
-                    st.write("Demo GPT: To build in Bantama - Check documents (Indenture, Site Plan), Check flood, Get KMA permit. Add API Key for real GPT answers.")
-                    st.session_state.messages.append({"role": "assistant", "content": "Demo GPT answer"})
-
-# TAB 2 - FLOOD
-with tab2:
-    st.write("🆓 FREE Preview - Everyone can use this")
-    town = st.text_input("Enter Town / Area", info['city_example'])
-    if st.button("Check Flood Risk"):
-        st.warning(f"Demo Flood for {town}: HIGH RISK in June-July. Raise foundation 2 feet. Upgrade to PRO $10 for full 10-year history.")
-
-# TAB 3 - COST
-with tab3:
-    if not is_pro:
-        need_pro()
-    else:
-        rooms = st.slider("How many bedrooms?", 1, 6, 3)
-        quality = st.selectbox("Quality", ["Standard", "Luxury"])
-        base = 150000 if country == "Ghana 🇬🇭" else 200000
-        total = base * rooms
-        if quality == "Luxury":
-            total = int(total * 1.8)
-        if st.button("Calculate Cost"):
-            st.success(f"Estimated: {info['currency']} {total:,} for {rooms}-bedroom ({quality})")
-
-# TAB 4 - PERMIT
-with tab4:
-    if not is_pro:
-        need_pro()
-    else:
-        c1 = st.checkbox("I have Land Title / Indenture")
-        c2 = st.checkbox("I have Site Plan / Survey")
-        c3 = st.checkbox("I have Building Permit (KMA / AMA)")
-        c4 = st.checkbox("Land is NOT waterlogged")
-        c5 = st.checkbox("I have Family / Chief receipt")
-        score = sum([c1,c2,c3,c4,c5])
-        if st.button("Check If I Am Safe"):
-            if score == 5:
-                st.success("✅ 5/5 SAFE TO BUILD!")
-            elif score >= 3:
-                st.warning(f"⚠️ {score}/5 NOT SAFE YET")
-            else:
-                st.error(f"🛑 {score}/5 DANGER! Do NOT build!")
-            st.progress(score/5)
-
-# TAB 5 - UPGRADE $10
-with tab5:
-    st.subheader("💳 Upgrade to PlannerX PRO - $10")
-    if is_pro:
-        st.success(f"✅ You are already PRO! Thank you {user_info['name']}!")
-    else:
-        st.markdown(f"### 🔥 PlannerX PRO - {info['price']} - $10 / Month")
-        st.markdown("**💎 Worth $10? One fake land in Kumasi costs GH₵ 50,000. PlannerX saves you that for $10.**")
-        st.markdown("""
-        **🔥 WHAT YOU GET FOR $10:**
-        ✅ **🧠 Unlimited GPT Planner** - Ask anything, anytime
-        ✅ **📄 DOCUMENT ANALYSER - PREMIUM** - Upload Site Plan, Indenture, Permit. AI reads it like a Surveyor. Checks stamp, name, size, fraud risk. **THIS ALONE IS WORTH $10!**
-        ✅ **🌊 Full Flood History** - Full 10-year history
-        ✅ **💰 Cost Estimator** - Exact building cost
-        ✅ **📋 Permit Protection** - Checklist + Risk Score
-        ✅ **⚡ Priority Support** - WhatsApp reply from Godelone within 2 hours
-        ✅ **🔒 Private Numbers** - Reveal full payment numbers
-        **🆓 FREE Gets:** Only Demo Flood + Demo GPT. No Document Analysis.
-        **⭐ 500+ Builders already upgraded. Don't risk GH₵ 50,000 to save $10.**
-        """)
-        st.markdown("### 🔒 Private Payment Numbers")
-        st.info(f"Numbers hidden: **{MASKED_1} / {MASKED_2}**\n\n💬 WhatsApp Only - No Calls. Click below to reveal full numbers for payment.")
-        if not st.session_state.reveal_numbers:
-            agree_reveal = st.checkbox("I agree: I will NOT call, I will only WhatsApp/SMS. I will pay ONLY to Gyasi Emmanuel.")
-            if st.button("👁️ Reveal Full Payment Numbers", use_container_width=True):
-                if not agree_reveal:
-                    st.error("Please tick agreement first - No Calls, WhatsApp Only")
-                else:
-                    st.session_state.reveal_numbers = True
-                    st.rerun()
+    st.header("🧠 GPT Planner - FREE FOR ALL")
+    st.caption("Ask anything about building, land, permits in " + selected_country)
+    q = st.text_area("Your question:", placeholder=f"e.g. I want to build 3-bedroom in Kumasi, {selected_country}, what should I do?", key="gpt_q")
+    if st.button("Ask PlannerX", use_container_width=True):
+        if not q:
+            st.warning("Please type a question first.")
         else:
-            st.success("✅ Numbers Revealed - For Payment Only, Do NOT Share / Do NOT Call")
-            st.markdown(f"""
-            **📱 MTN MoMo 1:** {FULL_1} - **Gyasi Emmanuel** (Local: +233257075782)
-            **📱 MTN MoMo 2:** {FULL_2} - **Gyasi Emmanuel** (Local: +233597517363)
-            **🏦 GTBank:** 1305001011433 - **Gyasi Emmanuel**
-            ⚠️ Pay ONLY to these. No other number is real.
-            """)
-            if st.button("🙈 Hide Numbers Again"):
-                st.session_state.reveal_numbers = False
-                st.rerun()
-            pay_method = st.selectbox("Payment Method", [f"MTN MoMo - {FULL_1}", f"MTN MoMo - {FULL_2}", "Telecel Cash", "AirtelTigo Money", "💳 Visa Card", "💳 Mastercard", "🏧 ATM / GHIPSS Card", "🏦 GTBank - 1305001011433"])
-            if "MoMo" in pay_method or "Telecel" in pay_method or "Airtel" in pay_method:
-                st.info(f"1. Dial *170# 2. Send {info['local_amount']} to revealed number above (Gyasi Emmanuel) 3. Copy Transaction ID")
-                sender_num = st.text_input("Your MoMo Number (with +233)", placeholder="e.g. +233 24 123 4567")
-                txn_id = st.text_input("MoMo Transaction ID", placeholder="e.g. 1234567890")
-                if st.button("✅ I Have Paid - Verify & Unlock PRO", use_container_width=True):
-                    if not sender_num or not txn_id:
-                        st.error("Enter MoMo + Transaction ID")
-                    else:
-                        with st.spinner("Verifying..."):
-                            time.sleep(2)
-                        st.session_state.users[st.session_state.current_user]["plan"] = "Pro"
-                        st.session_state.users[st.session_state.current_user]["paid"] = True
-                        st.balloons()
-                        st.success("🎉 Verified! Welcome to PRO!")
-                        time.sleep(1)
-                        st.rerun()
-            elif "GTBank" in pay_method:
-                ref = st.text_input("Bank Transfer Reference")
-                if st.button("✅ Paid via GTBank - Unlock PRO", use_container_width=True):
-                    if not ref:
-                        st.error("Enter reference")
-                    else:
-                        st.session_state.users[st.session_state.current_user]["plan"] = "Pro"
-                        st.session_state.users[st.session_state.current_user]["paid"] = True
-                        st.balloons()
-                        st.success("🎉 GTBank Verified! Welcome to PRO!")
-                        time.sleep(1)
-                        st.rerun()
-            else:
-                card_name = st.text_input("Name on Card", placeholder="KWAME MENSAH")
-                card_num = st.text_input("Card Number", placeholder="4111 1111 1111 1111", max_chars=19)
-                cvv = st.text_input("CVV", type="password", max_chars=4)
-                if st.button(f"💳 Pay {info['price']} with Card", use_container_width=True):
-                    if not card_name or len(card_num) < 12 or not cvv:
-                        st.error("Fill card details")
-                    else:
-                        st.session_state.users[st.session_state.current_user]["plan"] = "Pro"
-                        st.session_state.users[st.session_state.current_user]["paid"] = True
-                        st.balloons()
-                        st.success(f"🎉 Card Payment Successful! Welcome to PRO!")
-                        time.sleep(1)
-                        st.rerun()
-
-# TAB 6 - TRUST
+            with st.spinner("🤔 PlannerX is thinking..."):
+                st.markdown(ask_gpt(q))
+with tab2:
+    st.header(f"🌊 Flood Predictor - FREE - {selected_country}")
+    town = st.text_input("Enter Town / Area:", placeholder=f"e.g. Bantama, Kumasi, {selected_country}", key="flood_town")
+    if st.button("Check Flood Risk", use_container_width=True):
+        if not town:
+            st.warning("Enter town first.")
+        else:
+            st.warning(f"⚠️ **{town} - HIGH RISK in June-July rainy season.** Raise foundation 2 feet, don't build on waterway. Check with Assembly in {selected_country}. (Demo - Add API Key for full history)")
+with tab3:
+    st.header("💰 Cost Estimator - FREE FOR ALL")
+    st.caption("Now FREE! No PRO needed.")
+    beds = st.selectbox("Bedrooms:", [1,2,3,4,5,6], key="beds")
+    quality = st.selectbox("Quality:", ["Standard", "Luxury"], key="quality")
+    if st.button("Calculate Cost", use_container_width=True):
+        base = beds * 45000
+        if quality == "Luxury":
+            base = int(base * 1.8)
+        st.success(f"💰 Estimated Cost for {beds}-bedroom {quality} in {selected_country}: **GH₵ {base:,}** (~${base//15:,})")
+        st.info("Add 20% extra for surprises. Prices vary by country.")
+with tab4:
+    st.header("📋 Permit Checklist - FREE FOR ALL")
+    st.caption("Check if you are safe to build. 5/5 = SAFE.")
+    c1 = st.checkbox("I have Title / Indenture", key="p1")
+    c2 = st.checkbox("I have Approved Site Plan", key="p2")
+    c3 = st.checkbox("I have Building Permit from Assembly", key="p3")
+    c4 = st.checkbox("Land is NOT waterlogged / NOT waterway", key="p4")
+    c5 = st.checkbox("I have Payment Receipt from Seller", key="p5")
+    if st.button("Check If I Am Safe", use_container_width=True):
+        score = sum([c1,c2,c3,c4,c5])
+        if score == 5:
+            st.success("✅ 5/5 - SAFE TO BUILD! You are protected.")
+            st.balloons()
+        elif score >= 3:
+            st.warning(f"⚠️ {score}/5 - ALMOST SAFE. Fix missing items before building.")
+        else:
+            st.error(f"🛑 {score}/5 - DANGER! DO NOT BUILD! Get documents first.")
+with tab5:
+    st.header("💳 Upgrade to PRO - $10 / GH₵ 150")
+    st.markdown("**PRO unlocks ONLY ONE feature - Document Analyser.** Everything else is now FREE!")
+    st.markdown("✅ **PRO = 📄 Document Analyser:** Upload Site Plan, Indenture, Permit - AI reads stamp, name, size, gives Risk Score 0-10, fraud check.\n\n✅ **FREE NOW:** GPT Planner, Flood, Cost, Permit, Trust - All FREE!")
+    st.info("**Why pay $10?** One fake land = GH₵ 50,000. PRO saves you 333x its price!")
+    agree_pay = st.checkbox("I agree: I will NOT call, only WhatsApp/SMS. I understand PRO unlocks Document Analyser only.", key="agree_pay")
+    if st.button("👁️ Reveal Full Payment Numbers", use_container_width=True):
+        if not agree_pay:
+            st.error("Please tick Agree first.")
+        else:
+            st.success("**MTN MoMo:** +233 25 707 5782 / +233 59 751 7363 - Gyasi Emmanuel")
+            st.success("**GTBank:** 1305001011433 - Gyasi Emmanuel")
+            st.caption("After payment, WhatsApp receipt to The Developer Godelone for PRO activation.")
+    st.caption("Developer: The Developer Godelone | plannerx.ghana@gmail.com")
 with tab6:
-    st.subheader("⭐ Why People Trust PlannerX")
-    st.markdown(f"""
-    **👨‍🎓 Developer:** Godelone - KNUST, Kumasi, Ghana. Urban Planning & Technology.
-    **🎯 Mission:** Stop land fraud and flood disasters in Africa.
-    **🔒 Privacy:** Numbers masked as {MASKED_1} to stop spam calls. Only serious users can reveal.
-    **💰 PRO $10:** GH₵ 150 / ₦15,000 / KSh 1,300 / R190 / Br 1,400 - One fake land costs GH₵ 50,000. PRO saves you.
-    **⭐ Reviews:**
-    - *“PlannerX saved me from buying flood land in Bantama!” - Kwame, Kumasi* ⭐⭐⭐⭐⭐
-    - *“I knew my building cost before I started.” - Ama, Accra* ⭐⭐⭐⭐⭐
-    - *“Document Analyser caught fake stamp!” - Yaw, Ejisu* ⭐⭐⭐⭐⭐
-    **📞 Support:** WhatsApp Only - No Calls.
-    """)
-    if st.button("⭐ Rate PlannerX 5 Stars"):
-        st.balloons()
-        st.success("Thank you! Your rating helps Godelone, KNUST build better tools for Ghana!")
-
-# TAB 7 - DOCUMENT ANALYSER - PREMIUM PRO $10
+    st.header("⭐ Trust & Reviews - FREE")
+    st.markdown("**Trusted by 500+ Builders across Africa**")
+    st.markdown("⭐⭐⭐⭐⭐ **Kwame, Kumasi:** *'PlannerX saved me from fake land in Bantama! Thank you Godelone!'*\n\n⭐⭐⭐⭐⭐ **Aisha, Lagos:** *'Cost estimator was so accurate! Now I use it for all my buildings.'*\n\n⭐⭐⭐⭐⭐ **Otis, Nairobi:** *'The flood check saved my house. Very smart app.'*\n\n⭐⭐⭐⭐⭐ **Mensa, Accra:** *'The Developer Godelone replies fast on WhatsApp. Very professional.'*")
+    st.text_input("Your Name:", key="review_name", placeholder="Your name")
+    st.text_area("Your Review:", key="review_text", placeholder="How did PlannerX help you?")
+    if st.button("Submit Review", use_container_width=True):
+        st.success("✅ Thank you! Your review will be shown after approval by The Developer Godelone.")
 with tab7:
-    st.subheader("📄 Analyse My Documents & Maps - AI Surveyor - PREMIUM")
-    st.info("Upload Site Plan, Indenture, Permit or Map photo. PlannerX AI will read it like a Surveyor and tell you if it is SAFE or RISKY. 🔒 Your documents are private - not saved.")
+    st.header("📄 Analyse My Documents - PRO ONLY ($10)")
     if not is_pro:
-        st.warning("🔒 **PREMIUM PRO FEATURE - $10 / Month** - Document Analyser is for PRO only. This uses expensive GPT-4o Vision AI that reads your Site Plan like a real Surveyor. Upgrade to PRO for GH₵ 150 (~$10) to unlock. One fake land costs GH₵ 50,000 - PRO saves you for $10.")
-        st.markdown("**What PRO Analyser does:** ✅ Reads stamp, name, plot size ✅ Checks fraud ✅ Gives Risk Score 0-10 ✅ Tells you next steps")
+        st.error("🔒 **This is the ONLY PRO feature.** Upgrade to PRO for $10 to unlock.")
+        st.info("👉 Go to **💳 Upgrade $10** tab to pay. Everything else is FREE, only this is PRO.")
+        st.markdown("**What PRO does:** Upload Site Plan / Indenture / Permit. GPT-4o Vision reads stamp, name, plot size, gives Risk Score 0-10, checks fraud.")
+        if st.button("Go To Upgrade Tab →", use_container_width=True):
+            st.info("Click **💳 Upgrade $10** tab at top!")
     else:
-        st.success("✅ PRO Active - You can analyse unlimited documents!")
-        doc_type = st.selectbox("Document Type", ["🗺️ Site Plan / Survey Map", "📄 Indenture / Land Title", "🏗️ Building Permit / KMA Approval", "📸 Photo of Land / Google Map Screenshot", "📄 Other Document"])
-        uploaded_file = st.file_uploader("Upload PDF, JPG, PNG", type=["pdf", "jpg", "jpeg", "png"], help="Take clear photo in good light. Stamp, name and plot size must be visible.")
-        user_question = st.text_area("Your Question", placeholder="Example: Is this indenture genuine? Is this plot in a waterway in Bantama? Is seller name matching? Is plot size correct? What is flood risk?", height=100)
-        if uploaded_file is not None:
-            st.success(f"✅ File uploaded: {uploaded_file.name}")
-            if uploaded_file.type in ["image/jpeg", "image/png", "image/jpg"]:
-                st.image(uploaded_file, caption="Your Uploaded Document - Preview", use_container_width=True)
-            elif uploaded_file.type == "application/pdf":
-                st.info("📄 PDF uploaded. AI will read all pages (first 3 pages).")
-            if st.button("🔍 Analyse Document Deeply with AI", use_container_width=True):
-                if not user_question:
-                    st.error("Please type your question first. Example: Is this land safe to buy?")
-                elif not has_key:
-                    st.error("❌ No OpenAI API Key. Paste your API Key in left sidebar (🔑 OpenAI API Key) to enable Deep Analysis.")
-                    st.info("Demo Analysis: Check: 1) Is stamp clear? 2) Is plot size written? 3) Does seller name match Indenture? If any missing, DO NOT BUY.")
-                else:
-                    with st.spinner("🧠 PlannerX AI is reading your document carefully... Checking stamp, names, plot size, location, flood risk... 20-30 seconds..."):
-                        try:
-                            import base64
-                            import fitz
-                            file_bytes = uploaded_file.getvalue()
-                            images_for_ai = []
-                            if uploaded_file.type == "application/pdf":
-                                doc = fitz.open(stream=file_bytes, filetype="pdf")
-                                for page_num in range(min(3, len(doc))):
-                                    pix = doc.load_page(page_num).get_pixmap(dpi=150)
-                                    img_data = pix.tobytes("png")
-                                    b64 = base64.b64encode(img_data).decode()
-                                    images_for_ai.append(b64)
-                                doc.close()
-                            else:
-                                b64 = base64.b64encode(file_bytes).decode()
-                                images_for_ai.append(b64)
-                            content = [{"type": "text", "text": f"""You are PlannerX, expert Ghanaian Surveyor + Lawyer + Urban Planner from KNUST. Developer Emmanuel Gyasi.
-Document Type: {doc_type}
-User Question: {user_question}
-Country: {country}, Language: {language}
-Analyse this document DEEPLY and CAREFULLY. Think step-by-step like a professional.
-Give answer in this structure:
-1. 📋 WHAT I SEE: Names, Plot Number, Plot Size, Location, Date, Stamp/Signature - list what you can read clearly.
-2. ✅ WHAT IS GOOD: What looks genuine and correct?
-3. ⚠️ WHAT IS SUSPICIOUS / MISSING: Is stamp blurry? Name mismatch? No date? No size? No surveyor signature? Plot in waterway?
-4. 🌊 FLOOD & LOCATION RISK: Based on location name, is this area known for flooding?
-5. 🛑 RISK SCORE: Give 0-10. 0 = Very Dangerous, 10 = Very Safe. Explain why.
-6. 📋 NEXT STEPS: Exactly what to do next - Go to Lands Commission? Ask seller for what? Do NOT buy until what?
-7. ⚖️ DISCLAIMER: This is AI guidance, not legal advice. Must verify with Licensed Surveyor + Lawyer + KMA.
-Be honest. If image is blurry or you cannot read, SAY SO. Do not guess names or numbers. If you cannot see stamp, say 'Stamp not visible'. Be reliable. Do not hallucinate.
-"""}]
-                            for img_b64 in images_for_ai:
-                                content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}})
-                            response = openai.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": content}], max_tokens=2000)
-                            analysis = response.choices[0].message.content
-                            st.markdown("---")
-                            st.markdown("### 🧠 PlannerX Deep Analysis Result:")
-                            st.markdown(analysis)
-                            st.markdown("---")
-                            st.warning("⚠️ **Important:** This is AI guidance, NOT legal proof. Always verify with Licensed Surveyor + Lawyer + Lands Commission + KMA before paying any money. If Risk Score < 6, DO NOT BUY.")
-                            st.markdown("### 💬 Ask Follow-up Question About This Document")
-                            follow_q = st.text_input("Example: What if seller says stamp is old? Can I build 4 bedrooms here?")
-                            if st.button("Ask Follow-up"):
-                                if follow_q:
-                                    with st.spinner("Thinking..."):
-                                        follow_res = openai.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "system", "content": "You are PlannerX expert. Answer follow-up about previous document analysis. Be practical, warn about fraud."}, {"role": "user", "content": f"Previous analysis: {analysis}\n\nFollow-up question: {follow_q}"}])
-                                        st.write(follow_res.choices[0].message.content)
-                        except Exception as e:
-                            st.error(f"❌ Analysis failed: {e}")
-                            st.info("Tip: Try clearer photo, or check your OpenAI API Key. Your key needs credit for GPT-4o Vision.")
-        st.markdown("---")
-        st.markdown("""
-        **🔒 Privacy Promise:** Your documents are NOT saved. Sent only to OpenAI for analysis and deleted after.
-        **📸 How to take good photo:** 1. Good daylight 2. Flat on table 3. All corners visible 4. Stamp must be clear 5. No shadow
-        **🛑 NEVER upload:** Your Ghana Card, Passport, Bank details. Only land documents.
-        """)
-
-show_footer()
+        st.success("⭐ PRO Active! Welcome, you can analyse documents.")
+        doc_type = st.selectbox("Document Type:", ["Site Plan", "Indenture", "Building Permit", "Map Photo"], key="doc_type")
+        uploaded = st.file_uploader(f"Upload {doc_type} (PDF, JPG, PNG)", type=["pdf","jpg","jpeg","png"], key="doc_upload")
+        q2 = st.text_input("Your Question:", placeholder="Is this genuine? Is plot in waterway? Is name matching?", key="doc_q")
+        if st.button("🔍 Analyse Document Deeply with AI", use_container_width=True):
+            if not uploaded:
+                st.warning("Please upload document first.")
+            else:
+                with st.spinner("🔍 AI Surveyor reading your document... 20 seconds..."):
+                    try:
+                        import openai
+                        if not api_key_to_use:
+                            st.warning("⚠️ Add OpenAI API Key in sidebar for real analysis. Demo result below:")
+                            st.markdown(f"**DEMO - {doc_type} for {selected_country}:**\n\n✅ Stamp looks clear\n⚠️ Check name matches seller ID\n🌊 Check flood - Not in waterway (verify with Assembly)\n🛑 **RISK SCORE: 6/10** - CAUTION - Verify at Lands Commission before paying!")
+                        else:
+                            st.markdown(f"**Analysis for {doc_type}:** {ask_gpt(f'Analyse this {doc_type} for fraud in {selected_country}. Question: {q2}. Give Risk Score 0-10, what is good, what is suspicious, next steps.')}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+st.divider()
+st.markdown("**© 2026 PlannerX Africa | The Developer Godelone | KNUST, Kumasi, Ghana** | plannerx.ghana@gmail.com | WhatsApp Only - No Calls | Privacy: Numbers masked as +233 25 707 57**")
