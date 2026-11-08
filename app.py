@@ -6,18 +6,15 @@ import os
 st.set_page_config(page_title="PlannerX Africa - Godelone", page_icon="🌍", layout="wide")
 st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 
-# ============ HELPERS ============
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
 def get_secret(key, default=""):
-    # ✅ SAFE - Works on laptop (no secrets.toml) AND on Cloud. Never crashes.
     try:
         return st.secrets.get(key, default)
     except Exception:
         return os.environ.get(key, default)
 
-# ALL 54 AFRICAN COUNTRIES - SEARCHABLE
 AFRICAN_COUNTRIES = [
     "Ghana 🇬🇭", "Nigeria 🇳🇬", "Kenya 🇰🇪", "South Africa 🇿🇦", "Ethiopia 🇪🇹",
     "Egypt 🇪🇬", "Morocco 🇲🇦", "Algeria 🇩🇿", "Tunisia 🇹🇳", "Libya 🇱🇾", "Sudan 🇸🇩", "South Sudan 🇸🇸",
@@ -26,10 +23,8 @@ AFRICAN_COUNTRIES = [
     "Senegal 🇸🇳", "Mali 🇲🇱", "Guinea 🇬🇳", "Guinea-Bissau 🇬🇼", "Sierra Leone 🇸🇱", "Liberia 🇱🇷", "Côte d'Ivoire 🇨🇮", "Burkina Faso 🇧🇫", "Niger 🇳🇪", "Togo 🇹🇬", "Benin 🇧🇯", "Gambia 🇬🇲", "Cape Verde 🇨🇻", "Mauritania 🇲🇷",
     "Angola 🇦🇴", "Zambia 🇿🇲", "Zimbabwe 🇿🇼", "Mozambique 🇲🇿", "Malawi 🇲🇼", "Botswana 🇧🇼", "Namibia 🇳🇦", "Lesotho 🇱🇸", "Eswatini 🇸🇿", "Madagascar 🇲🇬", "Mauritius 🇲🇺", "Seychelles 🇸🇨", "Comoros 🇰🇲", "Djibouti 🇩🇯", "Eritrea 🇪🇷", "Somalia 🇸🇴"
 ]
-
 LANGUAGES = ["English", "Twi", "Pidgin", "Swahili", "Yoruba", "Hausa", "French", "Amharic", "Arabic", "Zulu", "Shona"]
 
-# ============ SESSION STATE ============
 if "users" not in st.session_state:
     st.session_state.users = {
         "demo@plannerx.com": {"name": "Demo User", "password": hash_pw("demo123"), "plan": "Free", "paid": False},
@@ -46,13 +41,11 @@ if "just_created_email" not in st.session_state:
 if "just_created_msg" not in st.session_state:
     st.session_state.just_created_msg = ""
 
-# ============ HEADER ============
 st.title("🌍 PlannerX Africa")
 st.markdown("### Don't Just Ask AI. Plan Africa With AI.")
 st.caption("Built by **The Developer Godelone** | KNUST, Kumasi, Ghana 🇬🇭 | Trusted by 500+ Builders")
 st.divider()
 
-# ============ SIDEBAR - SEARCHABLE COUNTRY + LANGUAGE ============
 with st.sidebar:
     st.header("🌍 Your Location")
     st.caption("Type to search any African country 👇")
@@ -93,7 +86,6 @@ with st.sidebar:
             st.session_state.just_created_msg = ""
             st.rerun()
 
-# ============ AUTH - LOGIN / SIGNUP - FIXED ============
 if not st.session_state.logged_in:
     st.markdown("## 👋 Welcome to PlannerX Africa")
     st.markdown("""
@@ -184,7 +176,6 @@ if not st.session_state.logged_in:
     st.markdown("**The Developer Godelone** | plannerx.ghana@gmail.com | WhatsApp Only - No Calls | © 2026 PlannerX Africa")
     st.stop()
 
-# ============ LOGGED IN - MAIN APP ============
 current_user_email = st.session_state.current_user
 user = st.session_state.users.get(current_user_email, {"name": "User", "plan": "Free", "paid": False})
 is_pro = user.get("paid", False) or user.get("plan") == "Pro"
